@@ -1,0 +1,107 @@
+@page "/sales-report"
+
+<h1>Sales report</h1>
+
+<label>
+    Region:
+    <select @bind="selectedRegion">
+        <option value="">All regions</option>
+        <option value="Gauteng">Gauteng</option>
+        <option value="Western Cape">Western Cape</option>
+        <option value="KwaZulu-Natal">KwaZulu-Natal</option>
+        <option value="Eastern Cape">Eastern Cape</option>
+    </select>
+</label>
+<button @onclick="Load">Run report</button>
+
+@if (loading)
+{
+    <p>Loading...</p>
+}
+else if (rows != null)
+{
+    <p>
+        <strong>@rows.Count</strong> orders.
+        Total excl. VAT: <strong>R @total.ToString("N2")</strong>,
+        VAT: <strong>R @totalVat.ToString("N2")</strong>
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Sales rep</th>
+                <th>Region</th>
+                <th>Amount (excl. VAT)</th>
+                <th>VAT</th>
+                <th>Amount (incl. VAT)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in rows)
+            {
+                <tr>
+                    <td>@s.OrderDate.ToString("yyyy-MM-dd")</td>
+                    <td>@s.SalesRep</td>
+                    <td>@s.Region</td>
+                    <td class="num">R @s.Amount.ToString("N2")</td>
+                    <td class="num">R @((s.Amount * 0.15m).ToString("N2"))</td>
+                    <td class="num">R @((s.Amount + s.Amount * 0.15m).ToString("N2"))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<SalesRecord>? rows;
+    private string selectedRegion = "";
+    private bool loading;
+    private decimal total;
+    private decimal totalVat;
+
+    private void Load()
+    {
+        loading = true;
+        try
+        {
+            var db = new LegacySalesDb("Server=PROD-SQL01;Database=Sales;User Id=sa;Password=P@ssw0rd!;");
+            var all = db.GetAllSales();
+
+            rows = new List<SalesRecord>();
+            total = 0;
+            totalVat = 0;
+
+            foreach (var s in all)
+            {
+                if (s.Status != "Cancelled")
+                {
+                    if (selectedRegion == "" || s.Region == selectedRegion)
+                    {
+                        if (s.Amount > 0)
+                        {
+                            rows.Add(s);
+                            total += s.Amount;
+                            totalVat += s.Amount * 0.15m;
+                        }
+                    }
+                }
+            }
+
+            rows = rows.OrderByDescending(r => r.OrderDate).ToList();
+
+            if (total < 500000)
+            {
+                var email = new EmailSender();
+                email.Send(
+                    "manager@company.co.za",
+                    "Sales below target",
+                    $"Sales for {(selectedRegion == "" ? "all regions" : selectedRegion)} are only R{total:N2}");
+            }
+        }
+        catch (Exception)
+        {
+        }
+        loading = false;
+    }
+}

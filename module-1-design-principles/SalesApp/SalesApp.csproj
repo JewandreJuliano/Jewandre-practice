@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Lets the app run on .NET 9 or 10 if that's the newest runtime you have installed. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+</Project>

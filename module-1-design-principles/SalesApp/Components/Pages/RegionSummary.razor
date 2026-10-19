@@ -1,0 +1,92 @@
+@page "/region-summary"
+
+<h1>Region summary</h1>
+
+<label>
+    <input type="checkbox" @bind="includeArchived" />
+    Show archived (2025) sales instead
+</label>
+<br />
+<button @onclick="Load">Load summary</button>
+<button @onclick="CleanUpCancelled">Clean up cancelled orders</button>
+
+@if (message != null)
+{
+    <p class="msg">@message</p>
+}
+
+@if (summary != null)
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Region</th>
+                <th>Orders</th>
+                <th>Total (excl. VAT)</th>
+                <th>VAT</th>
+                <th>Total (incl. VAT)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in summary)
+            {
+                <tr>
+                    <td>@r.Region</td>
+                    <td class="num">@r.Orders</td>
+                    <td class="num">R @r.Total.ToString("N2")</td>
+                    <td class="num">R @r.Vat.ToString("N2")</td>
+                    <td class="num">R @((r.Total + r.Vat).ToString("N2"))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool includeArchived;
+    private List<RegionRow>? summary;
+    private string? message;
+
+    private LegacySalesDb GetDb()
+    {
+        if (includeArchived)
+        {
+            return new ArchivedSalesDb("Server=PROD-SQL01;Database=Sales;User Id=sa;Password=P@ssw0rd!;");
+        }
+        return new LegacySalesDb("Server=PROD-SQL01;Database=Sales;User Id=sa;Password=P@ssw0rd!;");
+    }
+
+    private async Task Load()
+    {
+        var db = GetDb();
+        var all = await db.GetAllSalesAsync();
+
+        summary = all
+            .Where(s => s.Status != "Cancelled" && s.Amount > 0)
+            .GroupBy(s => s.Region)
+            .Select(g => new RegionRow(
+                g.Key,
+                g.Count(),
+                g.Sum(x => x.Amount),
+                g.Sum(x => x.Amount) * 0.15m))
+            .OrderByDescending(r => r.Total)
+            .ToList();
+
+        message = null;
+    }
+
+    private void CleanUpCancelled()
+    {
+        var db = GetDb();
+        var cancelled = db.GetAllSales().Where(s => s.Status == "Cancelled").ToList();
+
+        foreach (var s in cancelled)
+        {
+            db.DeleteSale(s.Id);
+        }
+
+        message = $"Removed {cancelled.Count} cancelled orders.";
+    }
+
+    private record RegionRow(string Region, int Orders, decimal Total, decimal Vat);
+}
